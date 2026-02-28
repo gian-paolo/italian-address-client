@@ -1,0 +1,29 @@
+{
+  "name": "@pallari/italian-address-client",
+  "version": "1.0.0",
+  "description": "Professional isomorphic JS client for certified Italian address lookup and normalization via ANNCSU/DataWS API.",
+  "main": "italian-address-client.js",
+  "browser": "italian-address-client.js",
+  "scripts": {
+    "test": "echo "Error: no test specified" && exit 1"
+  },
+  "keywords": [
+    "anncsu",
+    "italy",
+    "address",
+    "normalization",
+    "istat",
+    "geocoding",
+    "autocomplete"
+  ],
+  "author": "Gian-Paolo Pallari",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gian-paolo/italian-address-api-client.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gian-paolo/italian-address-api-client/issues"
+  },
+  "homepage": "https://anncsu.dataws.it"
+}
