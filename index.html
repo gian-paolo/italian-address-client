@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ANNCSU API - Vanilla JS Client</title>
+    <style>
+        :root { --primary: #0056b3; --primary-hover: #004494; --bg: #f8fafc; --text: #334155; --border: #e2e8f0; }
+        body { font-family: -apple-system, system-ui, sans-serif; line-height: 1.6; color: var(--text); max-width: 800px; margin: 0 auto; padding: 2rem; background: var(--bg); }
+        .card { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        h1 { color: var(--primary); margin-top: 0; font-size: 1.5rem; }
+        
+        .grid { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 1.5rem; }
+        @media (min-width: 768px) { .grid { grid-template-columns: 2fr 3fr 1fr; } }
+
+        .field { position: relative; display: flex; flex-direction: column; }
+        label { font-weight: 600; font-size: 0.85rem; margin-bottom: 0.4rem; color: #475569; }
+        input { padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; width: 100%; box-sizing: border-box; outline: none; transition: border-color 0.2s; }
+        input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,86,179,0.1); }
+        input:disabled { background: #f1f5f9; cursor: not-allowed; }
+
+        .suggestions { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 100; max-height: 250px; overflow-y: auto; display: none; }
+        .suggestion-item { padding: 0.75rem 1rem; cursor: pointer; border-bottom: 1px solid #f1f5f9; }
+        .suggestion-item:hover { background: #f8fafc; }
+        .suggestion-item .main { display: block; font-weight: 500; }
+        .suggestion-item .sub { display: block; font-size: 0.75rem; color: #64748b; }
+        
+        .result-box { background: #0f172a; color: #e2e8f0; padding: 1rem; border-radius: 8px; margin-top: 1.5rem; font-family: monospace; font-size: 0.85rem; overflow-x: auto; white-space: pre-wrap; }
+        .info-note { font-size: 0.75rem; color: #64748b; margin-top: 0.5rem; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>Certified Address Lookup</h1>
+    <p>Nationwide search for Italian addresses using official ANNCSU data.</p>
+
+    <div class="grid">
+        <div class="field">
+            <label>Municipality (Optional)</label>
+            <input type="text" id="input-comune" placeholder="e.g., Milan, Rome...">
+            <div id="suggest-comune" class="suggestions"></div>
+        </div>
+
+        <div class="field">
+            <label>Street Address</label>
+            <input type="text" id="input-strada" placeholder="Start typing street name...">
+            <div id="suggest-strada" class="suggestions"></div>
+        </div>
+
+        <div class="field">
+            <label>Number</label>
+            <input type="text" id="input-civico" placeholder="N°" disabled>
+            <div id="suggest-civico" class="suggestions"></div>
+        </div>
+    </div>
+    <div class="info-note">
+        Note: Searching without a municipality will return results from all over Italy.
+    </div>
+
+    <div id="field-interno" class="field" style="margin-top: 1rem; display: none;">
+        <label style="color: var(--primary)">Interior / Access Point</label>
+        <input type="text" id="input-interno" placeholder="Select interior...">
+        <div id="suggest-interno" class="suggestions"></div>
+    </div>
+
+    <div id="result-container" style="display: none;">
+        <h4 style="margin-bottom: 0.5rem; margin-top: 2rem;">API Response (JSON):</h4>
+        <div class="result-box" id="result-json"></div>
+    </div>
+</div>
+
+<script>
+    const API_BASE_URL = 'https://anncsu-api.dataws.it/v1';
+    
+    let state = { comune: null, strada: null, civico: null };
+
+    const dom = {
+        inputs: {
+            comune: document.getElementById('input-comune'),
+            strada: document.getElementById('input-strada'),
+            civico: document.getElementById('input-civico'),
+            interno: document.getElementById('input-interno')
+        },
+        suggests: {
+            comune: document.getElementById('suggest-comune'),
+            strada: document.getElementById('suggest-strada'),
+            civico: document.getElementById('suggest-civico'),
+            interno: document.getElementById('suggest-interno')
+        }
+    };
+
+    async function apiRequest(endpoint, params) {
+        const url = new URL(`${API_BASE_URL}/${endpoint}`);
+        Object.entries(params).forEach(([k, v]) => url.searchParams.append(k, v));
+        try {
+            const res = await fetch(url);
+            return await res.json();
+        } catch (e) {
+            console.error("API Fetch Error:", e);
+            return [];
+        }
+    }
+
+    function renderList(el, items, onSelect) {
+        el.innerHTML = '';
+        if (items.length === 0) { el.style.display = 'none'; return; }
+        el.style.display = 'block';
+        items.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'suggestion-item';
+            div.innerHTML = item.html;
+            div.onclick = () => { onSelect(item.data); el.style.display = 'none'; };
+            el.appendChild(div);
+        });
+    }
+
+    dom.inputs.comune.oninput = async (e) => {
+        const q = e.target.value;
+        if (q.length < 2) { state.comune = null; return dom.suggests.comune.style.display = 'none'; }
+        const data = await apiRequest('municipalities', { name: `ilike.*${q}*`, limit: 10 });
+        renderList(dom.suggests.comune, data.map(c => ({
+            html: `<span class="main">${c.name}</span><span class="sub">${c.province} (${c.region})</span>`,
+            data: c
+        })), (c) => {
+            state.comune = c;
+            dom.inputs.comune.value = c.name;
+            dom.inputs.strada.value = '';
+            dom.inputs.strada.focus();
+            resetFrom('strada');
+        });
+    };
+
+    dom.inputs.strada.oninput = async (e) => {
+        const q = e.target.value;
+        if (q.length < 3) return dom.suggests.strada.style.display = 'none';
+        
+        const params = { name: `ilike.*${q}*`, limit: 15 };
+        let endpoint = 'streets_full';
+
+        if (state.comune) {
+            params.istat_code = `eq.${state.comune.istat_code}`;
+            endpoint = 'streets';
+        }
+
+        const data = await apiRequest(endpoint, params);
+        renderList(dom.suggests.strada, data.map(s => {
+            let subText = s.locality || '';
+            if (!state.comune) {
+                subText = `${s.municipality} (${s.province}), ${s.region}${subText ? ' - ' + subText : ''}`;
+            }
+            return {
+                html: `<span class="main">${s.full_street_name}</span><span class="sub">${subText}</span>`,
+                data: s
+            };
+        }), (s) => {
+            state.strada = s;
+            dom.inputs.strada.value = s.full_street_name;
+            if (!state.comune) {
+                dom.inputs.comune.value = s.municipality;
+                state.comune = { istat_code: s.istat_code, name: s.municipality };
+            }
+            dom.inputs.civico.disabled = false;
+            dom.inputs.civico.value = '';
+            dom.inputs.civico.focus();
+            resetFrom('civico');
+        });
+    };
+
+    dom.inputs.civico.oninput = async (e) => {
+        const q = e.target.value;
+        const data = await apiRequest('addresses', { street_id: `eq.${state.strada.id}`, full_number: `ilike.${q}*`, limit: 20, order: 'number.asc' });
+        renderList(dom.suggests.civico, data.map(a => ({
+            html: `<span class="main">${a.full_number}</span>`,
+            data: a
+        })), (a) => {
+            state.civico = a;
+            dom.inputs.civico.value = a.full_number;
+            showOutput(a);
+            if (a.other_entries_count > 0) {
+                document.getElementById('field-interno').style.display = 'block';
+                dom.inputs.interno.value = '';
+            } else {
+                document.getElementById('field-interno').style.display = 'none';
+            }
+        });
+    };
+
+    dom.inputs.interno.onfocus = async () => {
+        const params = { street_id: `eq.${state.strada.id}`, limit: 100, order: 'label.asc' };
+        if (state.civico.number === null) params.number = 'is.null';
+        else params.number = `eq.${state.civico.number}`;
+        if (!state.civico.extension) params.extension = 'is.null';
+        else params.extension = `eq.${state.civico.extension}`;
+
+        const data = await apiRequest('access_points', params);
+        renderList(dom.suggests.interno, data.map(ap => ({
+            html: `<span class="main">${ap.label}</span><span class="sub">National ID: ${ap.national_id}</span>`,
+            data: ap
+        })), (ap) => {
+            dom.inputs.interno.value = ap.label;
+            showOutput(ap);
+        });
+    };
+
+    function resetFrom(level) {
+        if (level === 'strada') { state.strada = null; dom.inputs.civico.disabled = true; dom.inputs.civico.value = ''; }
+        if (level === 'strada' || level === 'civico') { 
+            state.civico = null; 
+            document.getElementById('field-interno').style.display = 'none'; 
+            document.getElementById('result-container').style.display = 'none';
+        }
+        dom.inputs.interno.value = '';
+    }
+
+    function showOutput(obj) {
+        document.getElementById('result-container').style.display = 'block';
+        document.getElementById('result-json').textContent = JSON.stringify(obj, null, 2);
+    }
+
+    document.addEventListener('click', (e) => {
+        Object.values(dom.suggests).forEach(s => { if (!e.target.closest('.field')) s.style.display = 'none'; });
+    });
+</script>
+
+</body>
+</html>
