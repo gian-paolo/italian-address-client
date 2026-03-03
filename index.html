@@ -70,9 +70,15 @@
     </div>
 </div>
 
+<script src="italian-address-client.js"></script>
 <script>
-    const API_BASE_URL = 'https://anncsu-api.dataws.it/v1';
+    // Auto-detect environment
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const API_BASE_URL = isLocal ? 'http://localhost/v1' : 'https://anncsu-api.dataws.it/v1';
     
+    console.log(`Using API: ${API_BASE_URL}`);
+
+    const client = new ItalianAddressClient({ baseUrl: API_BASE_URL });
     let state = { comune: null, strada: null, civico: null };
 
     const dom = {
@@ -90,18 +96,6 @@
         }
     };
 
-    async function apiRequest(endpoint, params) {
-        const url = new URL(`${API_BASE_URL}/${endpoint}`);
-        Object.entries(params).forEach(([k, v]) => url.searchParams.append(k, v));
-        try {
-            const res = await fetch(url);
-            return await res.json();
-        } catch (e) {
-            console.error("API Fetch Error:", e);
-            return [];
-        }
-    }
-
     function renderList(el, items, onSelect) {
         el.innerHTML = '';
         if (items.length === 0) { el.style.display = 'none'; return; }
@@ -118,7 +112,8 @@
     dom.inputs.comune.oninput = async (e) => {
         const q = e.target.value;
         if (q.length < 2) { state.comune = null; return dom.suggests.comune.style.display = 'none'; }
-        const data = await apiRequest('municipalities', { name: `ilike.*${q}*`, limit: 10 });
+        
+        const data = await client.searchMunicipalities(q, { limit: 10 });
         renderList(dom.suggests.comune, data.map(c => ({
             html: `<span class="main">${c.name}</span><span class="sub">${c.province} (${c.region})</span>`,
             data: c
@@ -135,15 +130,12 @@
         const q = e.target.value;
         if (q.length < 3) return dom.suggests.strada.style.display = 'none';
         
-        const params = { name: `ilike.*${q}*`, limit: 15 };
-        let endpoint = 'streets_full';
-
+        const options = { limit: 15 };
         if (state.comune) {
-            params.istat_code = `eq.${state.comune.istat_code}`;
-            endpoint = 'streets';
+            options.istat_code = state.comune.istat_code;
         }
 
-        const data = await apiRequest(endpoint, params);
+        const data = await client.searchStreets(q, options);
         renderList(dom.suggests.strada, data.map(s => {
             let subText = s.locality || '';
             if (!state.comune) {
@@ -169,7 +161,10 @@
 
     dom.inputs.civico.oninput = async (e) => {
         const q = e.target.value;
-        const data = await apiRequest('addresses', { street_id: `eq.${state.strada.id}`, full_number: `ilike.${q}*`, limit: 20, order: 'number.asc' });
+        // The client doesn't have a specific method for addresses yet, so we use _fetch directly or we should add it.
+        // For now, let's use the client's internal helper or extend it.
+        const data = await client._fetch('addresses', { street_id: `eq.${state.strada.id}`, full_number: `ilike.${q}*`, limit: 20, order: 'number.asc' });
+        
         renderList(dom.suggests.civico, data.map(a => ({
             html: `<span class="main">${a.full_number}</span>`,
             data: a
@@ -193,7 +188,7 @@
         if (!state.civico.extension) params.extension = 'is.null';
         else params.extension = `eq.${state.civico.extension}`;
 
-        const data = await apiRequest('access_points', params);
+        const data = await client._fetch('access_points', params);
         renderList(dom.suggests.interno, data.map(ap => ({
             html: `<span class="main">${ap.label}</span><span class="sub">National ID: ${ap.national_id}</span>`,
             data: ap
