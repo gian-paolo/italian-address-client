@@ -16,7 +16,23 @@
     class ItalianAddressClient {
         constructor(options = {}) {
             this.baseUrl = options.baseUrl || 'https://anncsu-api.dataws.it/v1';
+            this.debounceMs = options.debounceMs || 300;
             this.state = { region: null, province: null, municipality: null, street: null };
+        }
+
+        /**
+         * Generic debounce helper - works in Browser and Node.js
+         */
+        debounce(func, wait = this.debounceMs) {
+            let timeout;
+            return (...args) => {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func.apply(this, args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
         }
 
         /**
@@ -134,7 +150,7 @@
                 suggEl.style.cssText = `display:none; position:absolute; z-index:9999; background:white; border:1px solid #ccc; width:${r.width}px; left:${r.left + window.scrollX}px; top:${r.bottom + window.scrollY}px; max-height:200px; overflow-y:auto; box-shadow:0 4px 6px rgba(0,0,0,0.1);`;
             };
 
-            el.addEventListener('input', this._debounce(async (e) => {
+            el.addEventListener('input', this.debounce(async (e) => {
                 const val = e.target.value;
                 if (val.length < 2) { suggEl.style.display = 'none'; return; }
                 const data = await sourceFn(val);
@@ -155,7 +171,7 @@
                         suggEl.appendChild(div);
                     });
                 }
-            }, 300));
+            }));
             document.addEventListener('click', (e) => { if (e.target !== el) suggEl.style.display = 'none'; });
         }
 
@@ -183,11 +199,6 @@
             if (el.tagName === 'SELECT') {
                 for (let opt of el.options) if (opt.textContent === val) { el.value = opt.value; break; }
             } else el.value = val;
-        }
-
-        _debounce(func, timeout) {
-            let timer;
-            return (...args) => { clearTimeout(timer); timer = setTimeout(() => { func.apply(this, args); }, timeout); };
         }
     }
 
