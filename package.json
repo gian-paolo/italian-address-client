@@ -4,6 +4,7 @@
   "description": "Professional isomorphic JS client for certified Italian address lookup and normalization via ANNCSU/DataWS API.",
   "main": "italian-address-client.js",
   "browser": "italian-address-client.js",
+  "types": "types.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
