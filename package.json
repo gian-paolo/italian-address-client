@@ -21,10 +21,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gian-paolo/italian-address-api-client.git"
+    "url": "git+https://github.com/gian-paolo/italian-address-client.git"
   },
   "bugs": {
-    "url": "https://github.com/gian-paolo/italian-address-api-client/issues"
+    "url": "https://github.com/gian-paolo/italian-address-client/issues"
   },
   "homepage": "https://anncsu.dataws.it"
 }

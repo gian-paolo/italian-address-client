@@ -1,5 +1,11 @@
+# .npmignore
 .git
 .gitignore
 index.html
 node_modules
 *.log
+.DS_Store
+package-lock.json
+tests/
+examples/
+scripts/
