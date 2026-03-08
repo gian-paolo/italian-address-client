@@ -15,6 +15,11 @@ export interface Province {
   region_code: string;
 }
 
+export interface StreetType {
+  id: number;
+  nome: string;
+}
+
 export interface Municipality {
   istat_code: string;
   name: string;
@@ -32,11 +37,14 @@ export interface Street {
   municipality: string;
   national_id: number;
   street_type: string;
+  display_street_type: string;
   name: string;
+  display_name: string;
   full_street_name: string;
   locality: string | null;
   province?: string;
   region?: string;
+  display_municipality?: string;
 }
 
 export interface Address {
@@ -73,6 +81,29 @@ export interface SearchOptions {
   limit?: number;
   province_code?: string;
   istat_code?: string;
+  smart?: boolean;
+  strict?: boolean;
+  dug_id?: number;
+}
+
+export interface AutocompleteConfig {
+  fields: {
+    region?: HTMLElement | HTMLSelectElement;
+    province?: HTMLElement | HTMLSelectElement;
+    street_type?: HTMLSelectElement;
+    municipality?: HTMLElement | HTMLSelectElement;
+    street?: HTMLElement | HTMLSelectElement;
+  };
+  outputs?: {
+    region_code?: HTMLInputElement;
+    province_code?: HTMLInputElement;
+    istat_code?: HTMLInputElement;
+    street_id?: HTMLInputElement;
+  };
+  options?: {
+    smart?: boolean;
+    strict?: boolean;
+  };
 }
 
 export class ItalianAddressClient {
@@ -84,6 +115,7 @@ export class ItalianAddressClient {
     province: Province | null;
     municipality: Municipality | null;
     street: Street | null;
+    dug_id: number | null;
   };
 
   /**
@@ -96,28 +128,21 @@ export class ItalianAddressClient {
    */
   _fetch<T = any>(endpoint: string, params?: Record<string, any>): Promise<T[]>;
 
+  /**
+   * Internal RPC helper
+   */
+  _rpc<T = any>(functionName: string, params?: Record<string, any>): Promise<T[]>;
+
   // Data Methods
   getRegions(): Promise<Region[]>;
   getProvinces(regionCode?: string | null): Promise<Province[]>;
+  getDugs(): Promise<StreetType[]>;
   searchMunicipalities(query: string, options?: SearchOptions): Promise<Municipality[]>;
   searchStreets(query: string, options?: SearchOptions): Promise<Street[]>;
   getAddressDetails(id: number | string): Promise<any>;
 
   // UI Methods (Browser Only)
-  attachAutocomplete(config: {
-    fields: {
-      region?: HTMLElement | HTMLSelectElement;
-      province?: HTMLElement | HTMLSelectElement;
-      municipality?: HTMLElement | HTMLSelectElement;
-      street?: HTMLElement | HTMLSelectElement;
-    };
-    outputs?: {
-      region_code?: HTMLInputElement;
-      province_code?: HTMLInputElement;
-      istat_code?: HTMLInputElement;
-      street_id?: HTMLInputElement;
-    };
-  }): void;
+  attachAutocomplete(config: AutocompleteConfig): void;
 }
 
 export default ItalianAddressClient;

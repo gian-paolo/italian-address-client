@@ -17,7 +17,7 @@
         constructor(options = {}) {
             this.baseUrl = options.baseUrl || 'https://anncsu-api.dataws.it/v1';
             this.debounceMs = options.debounceMs || 300;
-            this.state = { region: null, province: null, municipality: null, street: null };
+            this.state = { region: null, province: null, municipality: null, street: null, dug_id: null };
         }
 
         /**
@@ -53,20 +53,54 @@
             }
         }
 
+        /**
+         * Generic RPC helper for PostgREST function calls
+         */
+        async _rpc(functionName, params = {}) {
+            try {
+                const res = await fetch(`${this.baseUrl}/rpc/${functionName}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params)
+                });
+                if (!res.ok) throw new Error(`RPC Error: ${res.status}`);
+                return await res.json();
+            } catch (e) {
+                console.error(`ItalianAddressClient RPC Error (${functionName}):`, e);
+                return [];
+            }
+        }
+
         // --- Data Methods (Server & Browser) ---
 
         async getRegions() { return this._fetch('regions', { order: 'name.asc' }); }
+        
         async getProvinces(regionCode = null) {
             const params = { order: 'name.asc' };
             if (regionCode) params.region_code = `eq.${regionCode}`;
             return this._fetch('provinces', params);
         }
+
+        async getDugs() { return this._fetch('dugs', { order: 'nome.asc' }); }
+
         async searchMunicipalities(query, options = {}) {
             const params = { name: `ilike.*${query}*`, limit: options.limit || 50, order: 'name.asc' };
             if (options.province_code) params.province_code = `eq.${options.province_code}`;
             return this._fetch('municipalities', params);
         }
+
         async searchStreets(query, options = {}) {
+            // Use Smart Search if requested or if a DUG filter is present
+            if (options.smart || options.dug_id || options.strict) {
+                return this._rpc('search_streets_smart', {
+                    search_text: query,
+                    istat_filter: options.istat_code || null,
+                    strict_mode: options.strict || false,
+                    dug_id_filter: options.dug_id || null
+                });
+            }
+
+            // Legacy/Standard search
             const params = { name: `ilike.*${query}*`, limit: options.limit || 100 };
             let endpoint = options.istat_code ? 'streets' : 'streets_full';
             if (options.istat_code) {
@@ -77,6 +111,7 @@
             }
             return this._fetch(endpoint, params);
         }
+
         async getAddressDetails(id) {
             const data = await this._fetch('address_details', { id: `eq.${id}` });
             return data.length > 0 ? data[0] : null;
@@ -88,7 +123,7 @@
             if (typeof window === 'undefined') {
                 throw new Error('attachAutocomplete() requires a browser environment with DOM access.');
             }
-            const { fields, outputs } = config;
+            const { fields, outputs, options = {} } = config;
             
             if (fields.region) this._bindElement(fields.region, () => this.getRegions(), (item) => {
                 this.state.region = item;
@@ -102,16 +137,36 @@
                 this._resetDownstream('province', config);
             });
 
+            if (fields.street_type && fields.street_type.tagName === 'SELECT') {
+                this._refreshSelect(fields.street_type, () => this.getDugs());
+                fields.street_type.addEventListener('change', (e) => {
+                    this.state.dug_id = e.target.value ? parseInt(e.target.value) : null;
+                });
+            }
+
             if (fields.municipality) this._bindElement(fields.municipality, (v) => this.searchMunicipalities(v, { province_code: this.state.province?.code }), (item) => {
                 this.state.municipality = item;
                 if (outputs?.istat_code) outputs.istat_code.value = item.istat_code;
                 this._resetDownstream('municipality', config);
             });
 
-            if (fields.street) this._bindElement(fields.street, (v) => this.searchStreets(v, { istat_code: this.state.municipality?.istat_code }), (item) => {
+            if (fields.street) this._bindElement(fields.street, (v) => this.searchStreets(v, { 
+                istat_code: this.state.municipality?.istat_code,
+                dug_id: this.state.dug_id,
+                smart: options.smart !== false, // Smart by default in autocomplete
+                strict: options.strict || false
+            }), (item) => {
                 this.state.street = item;
                 if (outputs?.street_id) outputs.street_id.value = item.id;
-                if (!this.state.municipality && fields.municipality) this._setElementValue(fields.municipality, item.display_municipality);
+                
+                // If we didn't have a municipality, fill it from the street result
+                if (!this.state.municipality && fields.municipality) {
+                    this._setElementValue(fields.municipality, item.display_municipality);
+                }
+                // If we didn't have a DUG selected, try to sync the select if present
+                if (!this.state.dug_id && fields.street_type && fields.street_type.tagName === 'SELECT') {
+                    this._setElementValue(fields.street_type, item.street_type);
+                }
             });
         }
 
@@ -119,8 +174,9 @@
             if (el.tagName === 'SELECT') {
                 this._refreshSelect(el, sourceFn);
                 el.addEventListener('change', (e) => {
-                    if (!e.target.selectedOptions[0].dataset.raw) return;
-                    onSelect(JSON.parse(e.target.selectedOptions[0].dataset.raw));
+                    const selected = e.target.selectedOptions[0];
+                    if (!selected || !selected.dataset.raw) return;
+                    onSelect(JSON.parse(selected.dataset.raw));
                 });
             } else {
                 this._setupAutocomplete(el, sourceFn, onSelect);
@@ -133,8 +189,8 @@
             el.innerHTML = '<option value="">-- Seleziona --</option>';
             data.forEach(item => {
                 const opt = document.createElement('option');
-                opt.value = item.code || item.istat_code || item.id;
-                opt.textContent = item.name || item.display_name;
+                opt.value = item.id || item.code || item.istat_code;
+                opt.textContent = item.nome || item.name || item.display_name;
                 opt.dataset.raw = JSON.stringify(item);
                 el.appendChild(opt);
             });
@@ -164,7 +220,7 @@
                         const label = item.name || item.display_name;
                         div.innerHTML = `<div>${item.display_street_type || ''} <strong>${label}</strong></div><small style="color:#666">${item.province || item.display_municipality || ''}</small>`;
                         div.onclick = () => {
-                            el.value = (item.display_street_type ? item.display_street_type + ' ' : '') + label;
+                            el.value = label; // Only the propre name, not the DUG if we are in smart/split mode
                             suggEl.style.display = 'none';
                             onSelect(item);
                         };
@@ -197,7 +253,7 @@
 
         _setElementValue(el, val) {
             if (el.tagName === 'SELECT') {
-                for (let opt of el.options) if (opt.textContent === val) { el.value = opt.value; break; }
+                for (let opt of el.options) if (opt.textContent === val || opt.value == val) { el.value = opt.value; break; }
             } else el.value = val;
         }
     }
