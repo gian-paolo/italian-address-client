@@ -90,8 +90,8 @@
         }
 
         async searchStreets(query, options = {}) {
-            // Use Smart Search if requested or if a DUG filter is present
-            if (options.smart || options.dug_id || options.strict) {
+            // Use Smart Search if requested (default) or if a DUG filter is present
+            if (options.smart !== false || options.dug_id || options.strict) {
                 return this._rpc('search_streets_smart', {
                     search_text: query,
                     istat_filter: options.istat_code || null,

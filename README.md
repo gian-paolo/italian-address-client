@@ -26,7 +26,7 @@ Inaccurate address data costs money. Whether it's for e-commerce checkouts, ship
 ### Browser (CDN)
 Simply include the library in your project via jsDelivr:
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@pallari/italian-address-client@1.1.1/italian-address-client.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@pallari/italian-address-client@1.1.2/italian-address-client.js"></script>
 ```
 
 ### Node.js (NPM)
