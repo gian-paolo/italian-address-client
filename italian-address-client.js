@@ -342,15 +342,24 @@
         _resetDownstream(level, config) {
             const levels = ['region', 'province', 'municipality', 'street', 'address', 'variant'];
             const idx = levels.indexOf(level);
+            
             for (let i = idx + 1; i < levels.length; i++) {
                 const l = levels[i];
                 this._setState(l, null);
-                if (config.fields[l]) {
-                    if (config.fields[l].tagName === 'SELECT') {
-                        config.fields[l].innerHTML = `<option value="">-- Seleziona ${l} --</option>`;
-                        config.fields[l].disabled = true;
+                
+                const field = config.fields[l];
+                if (field) {
+                    if (field.tagName === 'SELECT') {
+                        // If it's the immediate next level, enable and refresh it
+                        if (i === idx + 1) {
+                            field.disabled = false;
+                            this._refreshSelect(field, () => this._getDownstreamSource(l));
+                        } else {
+                            field.innerHTML = `<option value="">-- Seleziona ${l} --</option>`;
+                            field.disabled = true;
+                        }
                     } else {
-                        config.fields[l].value = '';
+                        field.value = '';
                     }
                 }
                 const outKey = l === 'street' || l === 'address' || l === 'variant' ? l + '_id' : l + '_code';
