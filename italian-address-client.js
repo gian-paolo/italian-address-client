@@ -280,6 +280,9 @@
             let suggEl = document.createElement('div');
             suggEl.className = 'anncsu-suggestions-list';
             document.body.appendChild(suggEl);
+            
+            let currentRequestId = 0;
+            let lastDisplayedRequestId = 0;
 
             const position = () => {
                 const r = el.getBoundingClientRect();
@@ -288,8 +291,19 @@
 
             el.addEventListener('input', this.debounce(async (e) => {
                 const val = e.target.value;
-                if (val.length < 1) { suggEl.style.display = 'none'; return; }
+                const requestId = ++currentRequestId;
+
+                if (val.length < 1) { 
+                    lastDisplayedRequestId = requestId;
+                    suggEl.style.display = 'none'; 
+                    return; 
+                }
                 const data = await sourceFn(val);
+                
+                // Only display if this result is newer than what's currently shown
+                if (requestId <= lastDisplayedRequestId) return;
+                lastDisplayedRequestId = requestId;
+
                 suggEl.innerHTML = '';
                 if (data.length > 0) {
                     position();
