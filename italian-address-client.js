@@ -160,13 +160,13 @@
             
             if (fields.region) this._bindElement(fields.region, () => this.getRegions(), (item) => {
                 this._setState('region', item);
-                if (outputs?.region_code) outputs.region_code.value = item.code;
+                if (outputs?.region_code) outputs.region_code.value = item ? (item.id || item.code) : '';
                 this._resetDownstream('region', config);
             });
 
             if (fields.province) this._bindElement(fields.province, () => this.getProvinces(this.state.region?.code), (item) => {
                 this._setState('province', item);
-                if (outputs?.province_code) outputs.province_code.value = item.code;
+                if (outputs?.province_code) outputs.province_code.value = item ? (item.id || item.code) : '';
                 this._resetDownstream('province', config);
             });
 
@@ -180,7 +180,7 @@
 
             if (fields.municipality) this._bindElement(fields.municipality, (v) => this.searchMunicipalities(v, { province_code: this.state.province?.code }), (item) => {
                 this._setState('municipality', item);
-                if (outputs?.istat_code) outputs.istat_code.value = item.istat_code;
+                if (outputs?.istat_code) outputs.istat_code.value = item ? item.istat_code : '';
                 this._resetDownstream('municipality', config);
             });
 
@@ -191,14 +191,14 @@
                 strict: options.strict || false
             }), (item) => {
                 this._setState('street', item);
-                if (outputs?.street_id) outputs.street_id.value = item.id;
+                if (outputs?.street_id) outputs.street_id.value = item ? item.id : '';
                 this._resetDownstream('street', config);
                 
-                if (!this.state.municipality && fields.municipality) {
+                if (item && !this.state.municipality && fields.municipality) {
                     this._setState('municipality', { istat_code: item.istat_code, name: item.display_municipality });
                     this._setElementValue(fields.municipality, item.display_municipality);
                 }
-                if (!this.state.dug_id && fields.street_type && fields.street_type.tagName === 'SELECT') {
+                if (item && !this.state.dug_id && fields.street_type && fields.street_type.tagName === 'SELECT') {
                     this._setElementValue(fields.street_type, item.street_type);
                     const selectedDug = Array.from(fields.street_type.options).find(o => o.textContent === item.street_type);
                     if (selectedDug) this._setState('dug_id', parseInt(selectedDug.value));
@@ -209,7 +209,12 @@
                 if (fields.address.tagName === 'SELECT') {
                     fields.address.addEventListener('change', (e) => {
                         const selected = e.target.selectedOptions[0];
-                        if (!selected || !selected.dataset.raw) return;
+                        if (!selected || !selected.dataset.raw) {
+                            this._setState('address', null);
+                            if (outputs?.address_id) outputs.address_id.value = '';
+                            this._resetDownstream('address', config);
+                            return;
+                        }
                         const item = JSON.parse(selected.dataset.raw);
                         this._setState('address', item);
                         if (outputs?.address_id) outputs.address_id.value = item.id;
@@ -218,7 +223,7 @@
                 } else {
                     this._setupAutocomplete(fields.address, (v) => this._searchAddresses(v, options), (item) => {
                         this._setState('address', item);
-                        if (outputs?.address_id) outputs.address_id.value = item.id;
+                        if (outputs?.address_id) outputs.address_id.value = item ? item.id : '';
                         this._resetDownstream('address', config);
                     });
                 }
@@ -296,6 +301,7 @@
                 if (val.length < 1) { 
                     lastDisplayedRequestId = requestId;
                     suggEl.style.display = 'none'; 
+                    onSelect(null);
                     return; 
                 }
                 const data = await sourceFn(val);
