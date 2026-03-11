@@ -17,7 +17,7 @@
         constructor(options = {}) {
             this.baseUrl = options.baseUrl || 'https://anncsu-api.dataws.it/v1';
             this.debounceMs = options.debounceMs || 300;
-            this.state = { region: null, province: null, municipality: null, street: null, dug_id: null };
+            this.state = { region: null, province: null, municipality: null, street: null, dug_id: null, address: null, variant: null };
             this._callbacks = {};
         }
 
@@ -128,6 +128,16 @@
             return data.length > 0 ? data[0] : null;
         }
 
+        async getAccessPoints(streetId, number, extension = null) {
+            const params = {
+                street_id: `eq.${streetId}`,
+                number: `eq.${number}`,
+                order: 'label.asc'
+            };
+            if (extension) params.extension = `eq.${extension}`;
+            return this._fetch('access_points', params);
+        }
+
         // --- UI Methods (Browser Only) ---
 
         attachAutocomplete(config) {
@@ -142,7 +152,9 @@
                 onProvinceChange: config.onProvinceChange,
                 onMunicipalityChange: config.onMunicipalityChange,
                 onStreetChange: config.onStreetChange,
-                onDug_idChange: config.onDugChange, // Alias dug_id to Dug for consistency
+                onDugChange: config.onDugChange,
+                onAddressChange: config.onAddressChange,
+                onVariantChange: config.onVariantChange,
                 onStateChange: config.onStateChange
             };
             
@@ -175,27 +187,67 @@
             if (fields.street) this._bindElement(fields.street, (v) => this.searchStreets(v, { 
                 istat_code: this.state.municipality?.istat_code,
                 dug_id: this.state.dug_id,
-                smart: options.smart !== false, // Smart by default in autocomplete
+                smart: options.smart !== false,
                 strict: options.strict || false
             }), (item) => {
                 this._setState('street', item);
                 if (outputs?.street_id) outputs.street_id.value = item.id;
+                this._resetDownstream('street', config);
                 
-                // If we didn't have a municipality, fill it from the street result
                 if (!this.state.municipality && fields.municipality) {
                     this._setState('municipality', { istat_code: item.istat_code, name: item.display_municipality });
                     this._setElementValue(fields.municipality, item.display_municipality);
                 }
-                // If we didn't have a DUG selected, try to sync the select if present
                 if (!this.state.dug_id && fields.street_type && fields.street_type.tagName === 'SELECT') {
                     this._setElementValue(fields.street_type, item.street_type);
-                    // No need to call _setState('dug_id') here as the change event on select won't fire
-                    // but the internal state will be partially out of sync with UI until next select change.
-                    // Let's force it:
                     const selectedDug = Array.from(fields.street_type.options).find(o => o.textContent === item.street_type);
                     if (selectedDug) this._setState('dug_id', parseInt(selectedDug.value));
                 }
             });
+
+            if (fields.address) {
+                if (fields.address.tagName === 'SELECT') {
+                    fields.address.addEventListener('change', (e) => {
+                        const selected = e.target.selectedOptions[0];
+                        if (!selected || !selected.dataset.raw) return;
+                        const item = JSON.parse(selected.dataset.raw);
+                        this._setState('address', item);
+                        if (outputs?.address_id) outputs.address_id.value = item.id;
+                        this._resetDownstream('address', config);
+                    });
+                } else {
+                    this._setupAutocomplete(fields.address, (v) => this._searchAddresses(v, options), (item) => {
+                        this._setState('address', item);
+                        if (outputs?.address_id) outputs.address_id.value = item.id;
+                        this._resetDownstream('address', config);
+                    });
+                }
+            }
+
+            if (fields.variant && fields.variant.tagName === 'SELECT') {
+                fields.variant.addEventListener('change', (e) => {
+                    const selected = e.target.selectedOptions[0];
+                    if (!selected || !selected.dataset.raw) return;
+                    const item = JSON.parse(selected.dataset.raw);
+                    this._setState('variant', item);
+                    if (outputs?.variant_id) outputs.variant_id.value = item.id;
+                });
+            }
+        }
+
+        async _searchAddresses(query, options) {
+            if (!this.state.street) return [];
+            const endpoint = options.unified ? 'access_points' : 'addresses';
+            const params = {
+                street_id: `eq.${this.state.street.id}`,
+                limit: options.limit || 50,
+                order: 'number.asc'
+            };
+            if (query) {
+                const queryKey = options.unified ? 'label' : 'full_number';
+                params[queryKey] = `ilike.*${query}*`;
+            }
+            return this._fetch(endpoint, params);
         }
 
         _bindElement(el, sourceFn, onSelect) {
@@ -218,7 +270,7 @@
             data.forEach(item => {
                 const opt = document.createElement('option');
                 opt.value = item.id || item.code || item.istat_code;
-                opt.textContent = item.nome || item.name || item.display_name;
+                opt.textContent = item.nome || item.name || item.display_name || item.full_number || item.label;
                 opt.dataset.raw = JSON.stringify(item);
                 el.appendChild(opt);
             });
@@ -236,7 +288,7 @@
 
             el.addEventListener('input', this.debounce(async (e) => {
                 const val = e.target.value;
-                if (val.length < 2) { suggEl.style.display = 'none'; return; }
+                if (val.length < 1) { suggEl.style.display = 'none'; return; }
                 const data = await sourceFn(val);
                 suggEl.innerHTML = '';
                 if (data.length > 0) {
@@ -245,10 +297,11 @@
                     data.forEach(item => {
                         const div = document.createElement('div');
                         div.style.padding = '8px'; div.style.cursor = 'pointer'; div.style.borderBottom = '1px solid #eee';
-                        const label = item.name || item.display_name;
-                        div.innerHTML = `<div>${item.display_street_type || ''} <strong>${label}</strong></div><small style="color:#666">${item.province || item.display_municipality || ''}</small>`;
+                        const label = item.full_number || item.label || item.name || item.display_name;
+                        const sub = item.display_street_type ? `<div>${item.display_street_type} <strong>${label}</strong></div><small style="color:#666">${item.province || item.display_municipality || ''}</small>` : `<div><strong>${label}</strong></div>`;
+                        div.innerHTML = sub;
                         div.onclick = () => {
-                            el.value = label; // Only the propre name, not the DUG if we are in smart/split mode
+                            el.value = label;
                             suggEl.style.display = 'none';
                             onSelect(item);
                         };
@@ -259,17 +312,29 @@
             document.addEventListener('click', (e) => { if (e.target !== el) suggEl.style.display = 'none'; });
         }
 
+        _setState(key, value) {
+            this.state[key] = value;
+            const callbackKey = 'on' + key.charAt(0).toUpperCase() + key.slice(1) + 'Change';
+            if (this._callbacks[callbackKey]) this._callbacks[callbackKey](value);
+            if (this._callbacks.onStateChange) this._callbacks.onStateChange(this.state);
+        }
+
         _resetDownstream(level, config) {
-            const levels = ['region', 'province', 'municipality', 'street'];
+            const levels = ['region', 'province', 'municipality', 'street', 'address', 'variant'];
             const idx = levels.indexOf(level);
             for (let i = idx + 1; i < levels.length; i++) {
                 const l = levels[i];
                 this._setState(l, null);
                 if (config.fields[l]) {
-                    if (config.fields[l].tagName === 'SELECT') this._refreshSelect(config.fields[l], () => this._getDownstreamSource(l));
-                    else config.fields[l].value = '';
+                    if (config.fields[l].tagName === 'SELECT') {
+                        config.fields[l].innerHTML = `<option value="">-- Seleziona ${l} --</option>`;
+                        config.fields[l].disabled = true;
+                    } else {
+                        config.fields[l].value = '';
+                    }
                 }
-                if (config.outputs && config.outputs[l + (l === 'street' ? '_id' : '_code')]) config.outputs[l + (l === 'street' ? '_id' : '_code')].value = '';
+                const outKey = l === 'street' || l === 'address' || l === 'variant' ? l + '_id' : l + '_code';
+                if (config.outputs && config.outputs[outKey]) config.outputs[outKey].value = '';
             }
         }
 
