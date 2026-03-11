@@ -104,6 +104,12 @@ export interface AutocompleteConfig {
     smart?: boolean;
     strict?: boolean;
   };
+  onRegionChange?: (region: Region | null) => void;
+  onProvinceChange?: (province: Province | null) => void;
+  onMunicipalityChange?: (municipality: Municipality | null) => void;
+  onStreetChange?: (street: Street | null) => void;
+  onDugChange?: (dug_id: number | null) => void;
+  onStateChange?: (state: any) => void;
 }
 
 export class ItalianAddressClient {

@@ -18,6 +18,17 @@
             this.baseUrl = options.baseUrl || 'https://anncsu-api.dataws.it/v1';
             this.debounceMs = options.debounceMs || 300;
             this.state = { region: null, province: null, municipality: null, street: null, dug_id: null };
+            this._callbacks = {};
+        }
+
+        /**
+         * Update internal state and trigger callbacks
+         */
+        _setState(key, value) {
+            this.state[key] = value;
+            const callbackKey = 'on' + key.charAt(0).toUpperCase() + key.slice(1) + 'Change';
+            if (this._callbacks[callbackKey]) this._callbacks[callbackKey](value);
+            if (this._callbacks.onStateChange) this._callbacks.onStateChange(this.state);
         }
 
         /**
@@ -125,14 +136,24 @@
             }
             const { fields, outputs, options = {} } = config;
             
+            // Register callbacks
+            this._callbacks = {
+                onRegionChange: config.onRegionChange,
+                onProvinceChange: config.onProvinceChange,
+                onMunicipalityChange: config.onMunicipalityChange,
+                onStreetChange: config.onStreetChange,
+                onDug_idChange: config.onDugChange, // Alias dug_id to Dug for consistency
+                onStateChange: config.onStateChange
+            };
+            
             if (fields.region) this._bindElement(fields.region, () => this.getRegions(), (item) => {
-                this.state.region = item;
+                this._setState('region', item);
                 if (outputs?.region_code) outputs.region_code.value = item.code;
                 this._resetDownstream('region', config);
             });
 
             if (fields.province) this._bindElement(fields.province, () => this.getProvinces(this.state.region?.code), (item) => {
-                this.state.province = item;
+                this._setState('province', item);
                 if (outputs?.province_code) outputs.province_code.value = item.code;
                 this._resetDownstream('province', config);
             });
@@ -140,12 +161,13 @@
             if (fields.street_type && fields.street_type.tagName === 'SELECT') {
                 this._refreshSelect(fields.street_type, () => this.getDugs());
                 fields.street_type.addEventListener('change', (e) => {
-                    this.state.dug_id = e.target.value ? parseInt(e.target.value) : null;
+                    const val = e.target.value ? parseInt(e.target.value) : null;
+                    this._setState('dug_id', val);
                 });
             }
 
             if (fields.municipality) this._bindElement(fields.municipality, (v) => this.searchMunicipalities(v, { province_code: this.state.province?.code }), (item) => {
-                this.state.municipality = item;
+                this._setState('municipality', item);
                 if (outputs?.istat_code) outputs.istat_code.value = item.istat_code;
                 this._resetDownstream('municipality', config);
             });
@@ -156,16 +178,22 @@
                 smart: options.smart !== false, // Smart by default in autocomplete
                 strict: options.strict || false
             }), (item) => {
-                this.state.street = item;
+                this._setState('street', item);
                 if (outputs?.street_id) outputs.street_id.value = item.id;
                 
                 // If we didn't have a municipality, fill it from the street result
                 if (!this.state.municipality && fields.municipality) {
+                    this._setState('municipality', { istat_code: item.istat_code, name: item.display_municipality });
                     this._setElementValue(fields.municipality, item.display_municipality);
                 }
                 // If we didn't have a DUG selected, try to sync the select if present
                 if (!this.state.dug_id && fields.street_type && fields.street_type.tagName === 'SELECT') {
                     this._setElementValue(fields.street_type, item.street_type);
+                    // No need to call _setState('dug_id') here as the change event on select won't fire
+                    // but the internal state will be partially out of sync with UI until next select change.
+                    // Let's force it:
+                    const selectedDug = Array.from(fields.street_type.options).find(o => o.textContent === item.street_type);
+                    if (selectedDug) this._setState('dug_id', parseInt(selectedDug.value));
                 }
             });
         }
@@ -236,7 +264,7 @@
             const idx = levels.indexOf(level);
             for (let i = idx + 1; i < levels.length; i++) {
                 const l = levels[i];
-                this.state[l] = null;
+                this._setState(l, null);
                 if (config.fields[l]) {
                     if (config.fields[l].tagName === 'SELECT') this._refreshSelect(config.fields[l], () => this._getDownstreamSource(l));
                     else config.fields[l].value = '';

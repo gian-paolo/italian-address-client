@@ -45,6 +45,12 @@ client.attachAutocomplete({
     fields: {
         municipality: document.getElementById('city-input'),
         street: document.getElementById('street-input')
+    },
+    // NEW: React to user selections with callbacks
+    onMunicipalityChange: (municipality) => console.log('City selected:', municipality),
+    onStreetChange: (street) => {
+        console.log('Street selected:', street);
+        // Example: load house numbers for this street
     }
 });
 ```
@@ -57,10 +63,36 @@ const ItalianAddressClient = require('@pallari/italian-address-client');
 const client = new ItalianAddressClient();
 
 async function validateAddress() {
-    const streets = await client.searchStreets('Via Roma', { istat_code: '015146' });
+    // Smart Search: automatically splits "Via Roma" into DUG and name
+    const streets = await client.searchStreets('Via Roma', { 
+        istat_code: '015146',
+        smart: true 
+    });
     console.log(streets[0]); // Certified data from ANNCSU
 }
 ```
+
+---
+
+## 🛠 Advanced Configuration
+
+### `attachAutocomplete` Options
+| Option | Type | Description |
+| --- | --- | --- |
+| `fields` | `Object` | Map of DOM elements (`municipality`, `street`, `region`, `province`, `street_type`). |
+| `outputs` | `Object` | Map of DOM elements to automatically fill with IDs (`istat_code`, `street_id`). |
+| `onMunicipalityChange` | `Function` | Callback fired when a municipality is selected. |
+| `onStreetChange` | `Function` | Callback fired when a street is selected. |
+| `onDugChange` | `Function` | Callback fired when a street type (DUG) is selected via `<select>`. |
+| `onStateChange` | `Function` | Callback fired on any state update. |
+
+### `searchStreets` Options
+| Option | Type | Description |
+| --- | --- | --- |
+| `istat_code` | `string` | Filter results by municipality ISTAT code. |
+| `smart` | `boolean` | (Default: `true`) Enables automatic DUG/Name splitting. |
+| `dug_id` | `number` | Filter by a specific DUG ID (e.g., 12 for "Vicolo"). |
+| `strict` | `boolean` | (Default: `false`) If true, only returns exact matches for the detected DUG. |
 
 ### Advanced: Geographical Filters (Region & Province)
 You can use standard `<select>` menus for higher-level filters. The client handles the cascading logic:
