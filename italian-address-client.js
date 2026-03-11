@@ -92,12 +92,12 @@
         async searchStreets(query, options = {}) {
             // Use Smart Search if requested (default) or if a DUG filter is present
             if (options.smart !== false || options.dug_id || options.strict) {
-                return this._rpc('search_streets_smart', {
-                    search_text: query,
-                    istat_filter: options.istat_code || null,
-                    strict_mode: options.strict || false,
-                    dug_id_filter: options.dug_id || null
-                });
+                const rpcParams = { search_text: query };
+                if (options.istat_code) rpcParams.istat_filter = options.istat_code;
+                if (options.dug_id) rpcParams.dug_id_filter = options.dug_id;
+                if (options.strict) rpcParams.strict_mode = true;
+
+                return this._rpc('search_streets_smart', rpcParams);
             }
 
             // Legacy/Standard search
