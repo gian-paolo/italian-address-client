@@ -180,13 +180,13 @@
                 this._setState('region', item);
                 if (outputs?.region_code) outputs.region_code.value = item ? (item.id || item.code) : '';
                 this._resetDownstream('region', config);
-            });
+            }, options);
 
             if (fields.province) this._bindElement(fields.province, () => this.getProvinces(this.state.region?.code), (item) => {
                 this._setState('province', item);
                 if (outputs?.province_code) outputs.province_code.value = item ? (item.id || item.code) : '';
                 this._resetDownstream('province', config);
-            });
+            }, options);
 
             if (fields.street_type && fields.street_type.tagName === 'SELECT') {
                 this._refreshSelect(fields.street_type, () => this.getDugs());
@@ -200,7 +200,7 @@
                 this._setState('municipality', item);
                 if (outputs?.istat_code) outputs.istat_code.value = item ? item.istat_code : '';
                 this._resetDownstream('municipality', config);
-            });
+            }, options);
 
             if (fields.street) this._bindElement(fields.street, (v) => this.searchStreets(v, { 
                 istat_code: this.state.municipality?.istat_code,
@@ -221,7 +221,7 @@
                     const selectedDug = Array.from(fields.street_type.options).find(o => o.textContent === item.street_type);
                     if (selectedDug) this._setState('dug_id', parseInt(selectedDug.value));
                 }
-            });
+            }, options);
 
             if (fields.address) {
                 if (fields.address.tagName === 'SELECT') {
@@ -243,7 +243,7 @@
                         this._setState('address', item);
                         if (outputs?.address_id) outputs.address_id.value = item ? item.id : '';
                         this._resetDownstream('address', config);
-                    });
+                    }, options);
                 }
             }
 
@@ -273,7 +273,7 @@
             return this._fetch(endpoint, params);
         }
 
-        _bindElement(el, sourceFn, onSelect) {
+        _bindElement(el, sourceFn, onSelect, options = {}) {
             if (el.tagName === 'SELECT') {
                 this._refreshSelect(el, sourceFn);
                 el.addEventListener('change', (e) => {
@@ -282,7 +282,7 @@
                     onSelect(JSON.parse(selected.dataset.raw));
                 });
             } else {
-                this._setupAutocomplete(el, sourceFn, onSelect);
+                this._setupAutocomplete(el, sourceFn, onSelect, options);
             }
         }
 
@@ -299,7 +299,7 @@
             });
         }
 
-        _setupAutocomplete(el, sourceFn, onSelect) {
+        _setupAutocomplete(el, sourceFn, onSelect, options = {}) {
             let suggEl = document.createElement('div');
             suggEl.className = 'anncsu-suggestions-list';
             document.body.appendChild(suggEl);
@@ -336,8 +336,29 @@
                         const div = document.createElement('div');
                         div.style.padding = '8px'; div.style.cursor = 'pointer'; div.style.borderBottom = '1px solid #eee';
                         const label = item.full_number || item.label || item.name || item.display_name;
-                        const sub = item.display_street_type ? `<div>${item.display_street_type} <strong>${label}</strong></div><small style="color:#666">${item.province || item.display_municipality || ''}</small>` : `<div><strong>${label}</strong></div>`;
-                        div.innerHTML = sub;
+                        
+                        let html = `<div><strong>${label}</strong></div>`;
+                        
+                        if (options.compactSuggestions) {
+                            // Compact inline format: Name (PR)
+                            if (item.display_street_type) {
+                                html = `<div>${item.display_street_type} <strong>${label}</strong>${item.province ? ` <small style="color:#64748b">(${item.province})</small>` : ''}</div>`;
+                            } else if (item.province) {
+                                html = `<div><strong>${label}</strong> <small style="color:#64748b">(${item.province})</small></div>`;
+                            }
+                        } else {
+                            // Default subtitle format (2 lines)
+                            if (item.display_street_type) {
+                                html = `<div>${item.display_street_type} <strong>${label}</strong></div>`;
+                                const sub = item.province || item.display_municipality || '';
+                                if (sub) html += `<small style="color:#64748b">${sub}</small>`;
+                            } else if (item.province || item.region) {
+                                const sub = [item.province, item.region ? `(${item.region})` : ''].filter(Boolean).join(' ');
+                                html = `<div><strong>${label}</strong></div><small style="color:#64748b">${sub}</small>`;
+                            }
+                        }
+
+                        div.innerHTML = html;
                         div.onclick = () => {
                             el.value = label;
                             suggEl.style.display = 'none';
