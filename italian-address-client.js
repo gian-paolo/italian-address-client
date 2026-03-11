@@ -158,6 +158,24 @@
                 onStateChange: config.onStateChange
             };
             
+            // Handle Clear Buttons (Optional UI helper)
+            if (config.clearButtons) {
+                Object.entries(config.clearButtons).forEach(([key, btn]) => {
+                    const input = fields[key];
+                    if (!input || !btn) return;
+                    const displayStyle = btn.getAttribute('data-display') || 'block';
+                    const toggle = () => { btn.style.display = input.value ? displayStyle : 'none'; };
+                    input.addEventListener('input', toggle);
+                    btn.addEventListener('click', () => {
+                        input.value = '';
+                        input.dispatchEvent(new Event('input')); // Triggers internal reset
+                        input.focus();
+                        toggle();
+                    });
+                    toggle(); // Initial state
+                });
+            }
+
             if (fields.region) this._bindElement(fields.region, () => this.getRegions(), (item) => {
                 this._setState('region', item);
                 if (outputs?.region_code) outputs.region_code.value = item ? (item.id || item.code) : '';
