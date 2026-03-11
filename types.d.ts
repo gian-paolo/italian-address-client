@@ -99,16 +99,21 @@ export interface AutocompleteConfig {
     province_code?: HTMLInputElement;
     istat_code?: HTMLInputElement;
     street_id?: HTMLInputElement;
+    address_id?: HTMLInputElement;
+    variant_id?: HTMLInputElement;
   };
   options?: {
     smart?: boolean;
     strict?: boolean;
+    unified?: boolean;
   };
   onRegionChange?: (region: Region | null) => void;
   onProvinceChange?: (province: Province | null) => void;
   onMunicipalityChange?: (municipality: Municipality | null) => void;
   onStreetChange?: (street: Street | null) => void;
   onDugChange?: (dug_id: number | null) => void;
+  onAddressChange?: (address: Address | null) => void;
+  onVariantChange?: (variant: AccessPoint | null) => void;
   onStateChange?: (state: any) => void;
 }
 
@@ -122,6 +127,8 @@ export class ItalianAddressClient {
     municipality: Municipality | null;
     street: Street | null;
     dug_id: number | null;
+    address: Address | null;
+    variant: AccessPoint | null;
   };
 
   /**
